@@ -1,6 +1,6 @@
 # llm-car
 
-車の型式（型式コード／型式記号）からメーカー名・車名・排気量などを取得するための Gemini Grounding API 連携プロジェクトです。Google 検索によるグラウンディングを有効化した Gemini 2.0 Flash (experimental) モデルを用いて、回答に出典 URL を添えた構造化データを返します。
+車の型式（型式コード／型式記号）からメーカー名・車名・排気量などを取得するための Gemini Grounding API 連携プロジェクトです。Google 検索によるグラウンディングを有効化した Gemini 2.5 Flash モデルを用いて、回答に出典 URL を添えた構造化データを返します。
 
 ## 構成
 
@@ -56,6 +56,10 @@ result_en = lookup_car("DBA-ZRR70W", response_language="English")
 ```bash
 python lookup_example.py
 ```
+モデルコードや Raw レスポンス表示を切り替えたい場合は引数を指定します。
+```bash
+python lookup_example.py DBA-ZRR70W --include-raw
+```
 
 出力例（概略）：
 - 型式に紐づく候補の辞書データ（メーカー・車名・排気量・根拠 URL など）
@@ -79,7 +83,7 @@ streamlit run streamlit_app.py
 
 ## コストの目安
 
-`lookup_example.py` で使用量を `promptTokenCount` / `candidatesTokenCount` として取得し、Gemini 2.0 Flash の暫定単価
+`lookup_example.py` で使用量を `promptTokenCount` / `candidatesTokenCount` として取得し、Gemini 2.5 Flash の暫定単価
 (参考値: 1M トークンあたり $0.10 → 1,000 トークンあたり $0.0001) を用いて概算を計算しています。ドル円換算は 1USD = 150JPY を仮定しています。実際の料金と為替は必ず最新情報を確認し、定数を更新してください。
 
 ## ライセンス

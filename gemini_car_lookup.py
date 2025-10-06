@@ -24,8 +24,8 @@ PROMPT_TEMPLATE = (
     "Provide a separate object for each distinct vehicle or market name; do not merge multiple names into a single entry. "
     "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
     "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
-    "('high'|'medium'|'low'), optional grade_or_variant, years, notes, and sources (array of URLs). "
-    "If the lookup fails, return an empty `vehicles` array and explain why in `notes` for a placeholder entry. "
+    "('high'|'medium'|'low'), optional grade_or_variant"
+    "If the lookup fails, return an empty `vehicles` array. "
     "Never invent data that is not grounded in the cited sources. Model code: {model_code}."
 )
 
@@ -79,10 +79,7 @@ class VehicleMatch:
     vehicle_name: Optional[str]
     displacement_cc: Optional[int]
     grade_or_variant: Optional[str] = None
-    years: Optional[str] = None
     confidence: Optional[str] = None
-    notes: Optional[str] = None
-    sources: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a JSON-serializable representation free of Nones."""
@@ -106,13 +103,22 @@ class LookupResult:
         }
 
 
+def _normalize_model_name(model_name: str) -> str:
+    """Ensure model identifiers include the `models/` prefix."""
+    if not model_name:
+        raise ValueError("model_name must be a non-empty string")
+    if model_name.startswith(("models/", "tunedModels/")):
+        return model_name
+    return f"models/{model_name}"
+
+
 class GeminiCarLookupService:
     """Wrapper around Gemini's grounded search to resolve model codes into specs."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "models/gemini-2.0-flash-exp",
+        model_name: str = "gemini-2.5-flash-lite",
         timeout_seconds: int = 30,
         include_raw_response: bool = False,
         tools: Optional[Sequence[Dict[str, Any]]] = None,
@@ -123,10 +129,10 @@ class GeminiCarLookupService:
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not provided. Pass api_key or set environment variable.")
 
-        self.model_name = model_name
+        self.model_name = _normalize_model_name(model_name)
         self.timeout_seconds = timeout_seconds
         self.include_raw_response = include_raw_response
-        self.endpoint = GEMINI_API_URL_TEMPLATE.format(model=model_name)
+        self.endpoint = GEMINI_API_URL_TEMPLATE.format(model=self.model_name)
         self.tools = list(tools) if tools is not None else [{"googleSearch": {}}]
         self.system_instruction = system_instruction or (
             "Ground every answer in reputable automotive sources (OEM documentation, trusted press, "
@@ -152,7 +158,7 @@ class GeminiCarLookupService:
     def _build_payload(self, model_code: str) -> Dict[str, Any]:
         language_instruction = (
             "Return all textual field values"
-            " (manufacturer, vehicle_name, grade_or_variant, years, notes, confidence) "
+            " (manufacturer, vehicle_name, grade_or_variant, confidence) "
             f"in {self.response_language}. "
             f"If source titles are quoted, localise descriptive text while keeping URL domains intact. "
             if self.response_language
@@ -171,10 +177,9 @@ class GeminiCarLookupService:
             ],
             "tools": self.tools,
             "generationConfig": {
-                "temperature": 0.25,
-                "topK": 32,
-                "topP": 0.9,
-                "responseMimeType": "application/json",
+                "temperature": 0.0,
+                "topK": 1,
+                "topP": 1.0,
             },
         }
         if self.system_instruction:
@@ -229,7 +234,6 @@ class GeminiCarLookupService:
                     manufacturer=None,
                     vehicle_name=None,
                     displacement_cc=None,
-                    notes=f"No grounded data found for model code '{model_code}'.",
                     confidence="low",
                     sources=sources,
                 )
@@ -338,10 +342,7 @@ class GeminiCarLookupService:
             vehicle_name=item.get("vehicle_name") or item.get("car_name") or item.get("model"),
             displacement_cc=displacement,
             grade_or_variant=item.get("grade_or_variant"),
-            years=item.get("years"),
             confidence=confidence,
-            notes=item.get("notes"),
-            sources=sources,
         )
 
     @staticmethod

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from typing import Dict, Optional
+from time import perf_counter
 
 import streamlit as st
 
@@ -43,7 +44,7 @@ def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[Dict[str, float]]
 st.set_page_config(page_title="型式 Lookup", page_icon="🚗", layout="wide")
 
 st.title("Gemini による型式 Lookup デモ")
-st.caption("Gemini 2.0 Flash (experimental) + Google 検索グラウンディングで型式から車両情報を引き当てます")
+st.caption("Gemini 2.5 Flash + Google 検索グラウンディングで型式から車両情報を引き当てます")
 
 with st.sidebar:
     st.header("設定")
@@ -79,13 +80,16 @@ if lookup_button:
         st.warning("型式コードを入力してください。")
     else:
         with st.spinner("Gemini へ問い合わせ中..."):
+            elapsed_seconds: Optional[float] = None
             try:
                 service = GeminiCarLookupService(
                     api_key=api_key_input or None,
                     include_raw_response=include_raw,
                     response_language=response_language,
                 )
+                start_time = perf_counter()
                 result = service.lookup(model_code.strip())
+                elapsed_seconds = perf_counter() - start_time
             except ValueError as exc:
                 st.error(f"初期化エラー: {exc}")
             except GeminiCarLookupError as exc:
@@ -102,6 +106,11 @@ if lookup_button:
                 usage = result.usage_metadata
                 estimated = estimate_cost(usage)
                 st.subheader("Usage / Cost")
+                if elapsed_seconds is not None:
+                    st.metric(
+                        label="API 応答時間",
+                        value=f"{elapsed_seconds:.2f} 秒",
+                    )
                 if estimated:
                     st.metric(
                         label="推定コスト",

@@ -1,10 +1,31 @@
+import argparse
+import json
+
 from gemini_car_lookup import lookup_car, GeminiCarLookupError
 
-# Gemini 2.0 Flash の暫定価格: 1M トークンあたり $0.10。
+# Gemini 2.5 Flash の暫定価格: 1M トークンあたり $0.10。
 # 最新の料金表を必ず確認してください。
 PROMPT_RATE_PER_1K_TOKENS_USD = 0.0001
 OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0001
 USD_TO_JPY_RATE = 150.0
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Run a Gemini lookup for a vehicle model code.",
+    )
+    parser.add_argument(
+        "model_code",
+        nargs="?",
+        default="5BA-TALA15",
+        help="Model code (kata-shiki) to look up.",
+    )
+    parser.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="Request and display the raw Gemini response payload.",
+    )
+    return parser.parse_args()
 
 
 def estimate_cost(result) -> None:
@@ -32,9 +53,14 @@ def estimate_cost(result) -> None:
 
 
 def main() -> None:
+    args = parse_args()
+
     # TODO: 型式コードを必要に応じて差し替えてください。
     try:
-        result = lookup_car("DBA-ZRR70W", include_raw_response=False)
+        result = lookup_car(
+            args.model_code,
+            include_raw_response=args.include_raw,
+        )
     except GeminiCarLookupError as exc:
         print("Lookup failed:", exc)
         print("Tips: 一時的に include_raw_response=True を指定するとレスポンス全体を確認できます。")
@@ -42,6 +68,13 @@ def main() -> None:
 
     for match in result.matches:
         print(match.to_dict())
+
+    if args.include_raw:
+        if result.raw_response is None:
+            print("Raw response not available; ensure include_raw_response=True was set.")
+        else:
+            print("Raw response:")
+            print(json.dumps(result.raw_response, ensure_ascii=False, indent=2))
 
     estimate_cost(result)
 
