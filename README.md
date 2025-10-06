@@ -79,8 +79,8 @@ streamlit run streamlit_app.py
 
 ## コストの目安
 
-`lookup_example.py` で使用量を `promptTokenCount` / `candidatesTokenCount` として取得し、Gemini 2.0 Flash (experimental) の暫定単価
-(現時点の参考値: 入力 1,000 トークンあたり $0.00035、出力 1,000 トークンあたり $0.0007) を用いて概算を計算しています。実際の料金は必ず Google Cloud の最新料金ページで確認し、定数を更新してください。
+`lookup_example.py` で使用量を `promptTokenCount` / `candidatesTokenCount` として取得し、Gemini 2.0 Flash の暫定単価
+(参考値: 1M トークンあたり $0.10 → 1,000 トークンあたり $0.0001) を用いて概算を計算しています。ドル円換算は 1USD = 150JPY を仮定しています。実際の料金と為替は必ず最新情報を確認し、定数を更新してください。
 
 ## ライセンス
 

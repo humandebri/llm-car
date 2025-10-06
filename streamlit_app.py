@@ -12,8 +12,9 @@ from gemini_car_lookup import (
     GeminiCarLookupService,
 )
 
-PROMPT_RATE_PER_1K_TOKENS_USD = 0.00035
-OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0007
+PROMPT_RATE_PER_1K_TOKENS_USD = 0.0001
+OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0001
+USD_TO_JPY_RATE = 150.0
 
 
 def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[Dict[str, float]]:
@@ -25,13 +26,17 @@ def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[Dict[str, float]]
 
     prompt_cost = (prompt_tokens / 1000) * PROMPT_RATE_PER_1K_TOKENS_USD
     output_cost = (output_tokens / 1000) * OUTPUT_RATE_PER_1K_TOKENS_USD
+    total_cost = prompt_cost + output_cost
 
     return {
         "prompt_tokens": prompt_tokens,
         "output_tokens": output_tokens,
         "prompt_cost": prompt_cost,
         "output_cost": output_cost,
-        "total_cost": prompt_cost + output_cost,
+        "total_cost": total_cost,
+        "prompt_cost_jpy": prompt_cost * USD_TO_JPY_RATE,
+        "output_cost_jpy": output_cost * USD_TO_JPY_RATE,
+        "total_cost_jpy": total_cost * USD_TO_JPY_RATE,
     }
 
 
@@ -99,9 +104,9 @@ if lookup_button:
                 st.subheader("Usage / Cost")
                 if estimated:
                     st.metric(
-                        label="推定コスト (USD)",
+                        label="推定コスト",
                         value=f"${estimated['total_cost']:.6f}",
-                        delta=None,
+                        delta=f"約 ¥{estimated['total_cost_jpy']:.2f}",
                     )
                     st.write(
                         {
@@ -109,6 +114,10 @@ if lookup_button:
                             "output_tokens": estimated["output_tokens"],
                             "prompt_cost_usd": round(estimated["prompt_cost"], 6),
                             "output_cost_usd": round(estimated["output_cost"], 6),
+                            "prompt_cost_jpy": round(estimated["prompt_cost_jpy"], 2),
+                            "output_cost_jpy": round(estimated["output_cost_jpy"], 2),
+                            "usd_to_jpy": USD_TO_JPY_RATE,
+                            "total_cost_jpy": round(estimated["total_cost_jpy"], 2),
                         }
                     )
                 else:

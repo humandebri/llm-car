@@ -1,8 +1,10 @@
 from gemini_car_lookup import lookup_car, GeminiCarLookupError
 
-# Gemini 2.0 Flash (experimental) の暫定価格例。実際の料金は最新の公式表で確認してください。
-PROMPT_RATE_PER_1K_TOKENS_USD = 0.00035
-OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0007
+# Gemini 2.0 Flash の暫定価格: 1M トークンあたり $0.10。
+# 最新の料金表を必ず確認してください。
+PROMPT_RATE_PER_1K_TOKENS_USD = 0.0001
+OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0001
+USD_TO_JPY_RATE = 150.0
 
 
 def estimate_cost(result) -> None:
@@ -17,11 +19,15 @@ def estimate_cost(result) -> None:
     prompt_cost = (prompt_tokens / 1000) * PROMPT_RATE_PER_1K_TOKENS_USD
     output_cost = (output_tokens / 1000) * OUTPUT_RATE_PER_1K_TOKENS_USD
     total_cost = prompt_cost + output_cost
+    prompt_cost_jpy = prompt_cost * USD_TO_JPY_RATE
+    output_cost_jpy = output_cost * USD_TO_JPY_RATE
+    total_cost_jpy = total_cost * USD_TO_JPY_RATE
 
     print("Usage Metadata:", usage)
     print(
-        f"Estimated cost: ${total_cost:.6f} "
-        f"(prompt: ${prompt_cost:.6f}, output: ${output_cost:.6f})"
+        f"Estimated cost: ${total_cost:.6f} (¥{total_cost_jpy:.2f}) "
+        f"[prompt: ${prompt_cost:.6f} (¥{prompt_cost_jpy:.2f}), "
+        f"output: ${output_cost:.6f} (¥{output_cost_jpy:.2f})]"
     )
 
 
