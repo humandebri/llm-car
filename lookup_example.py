@@ -34,7 +34,7 @@ def estimate_cost(result) -> None:
 def main() -> None:
     # TODO: 型式コードを必要に応じて差し替えてください。
     try:
-        result = lookup_car("5BA-ZTALA15", include_raw_response=False)
+        result = lookup_car("5BA-TALA15", include_raw_response=False)
     except GeminiCarLookupError as exc:
         print("Lookup failed:", exc)
         print("Tips: 一時的に include_raw_response=True を指定するとレスポンス全体を確認できます。")
