@@ -56,6 +56,10 @@ result_en = lookup_car("DBA-ZRR70W", response_language="English")
 ```bash
 python lookup_example.py
 ```
+モデルコードや Raw レスポンス表示を切り替えたい場合は引数を指定します。
+```bash
+python lookup_example.py DBA-ZRR70W --include-raw
+```
 
 出力例（概略）：
 - 型式に紐づく候補の辞書データ（メーカー・車名・排気量・根拠 URL など）
