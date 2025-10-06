@@ -1,6 +1,6 @@
 from gemini_car_lookup import lookup_car, GeminiCarLookupError
 
-# Gemini 2.0 Flash の暫定価格: 1M トークンあたり $0.10。
+# Gemini 2.5 Flash の暫定価格: 1M トークンあたり $0.10。
 # 最新の料金表を必ず確認してください。
 PROMPT_RATE_PER_1K_TOKENS_USD = 0.0001
 OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0001
@@ -34,7 +34,7 @@ def estimate_cost(result) -> None:
 def main() -> None:
     # TODO: 型式コードを必要に応じて差し替えてください。
     try:
-        result = lookup_car("DBA-ZRR70W", include_raw_response=False)
+        result = lookup_car("5BA-ZTALA15", include_raw_response=False)
     except GeminiCarLookupError as exc:
         print("Lookup failed:", exc)
         print("Tips: 一時的に include_raw_response=True を指定するとレスポンス全体を確認できます。")

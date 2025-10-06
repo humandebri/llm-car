@@ -106,13 +106,22 @@ class LookupResult:
         }
 
 
+def _normalize_model_name(model_name: str) -> str:
+    """Ensure model identifiers include the `models/` prefix."""
+    if not model_name:
+        raise ValueError("model_name must be a non-empty string")
+    if model_name.startswith(("models/", "tunedModels/")):
+        return model_name
+    return f"models/{model_name}"
+
+
 class GeminiCarLookupService:
     """Wrapper around Gemini's grounded search to resolve model codes into specs."""
 
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "models/gemini-2.0-flash-exp",
+        model_name: str = "gemini-2.5-flash",
         timeout_seconds: int = 30,
         include_raw_response: bool = False,
         tools: Optional[Sequence[Dict[str, Any]]] = None,
@@ -123,10 +132,10 @@ class GeminiCarLookupService:
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not provided. Pass api_key or set environment variable.")
 
-        self.model_name = model_name
+        self.model_name = _normalize_model_name(model_name)
         self.timeout_seconds = timeout_seconds
         self.include_raw_response = include_raw_response
-        self.endpoint = GEMINI_API_URL_TEMPLATE.format(model=model_name)
+        self.endpoint = GEMINI_API_URL_TEMPLATE.format(model=self.model_name)
         self.tools = list(tools) if tools is not None else [{"googleSearch": {}}]
         self.system_instruction = system_instruction or (
             "Ground every answer in reputable automotive sources (OEM documentation, trusted press, "
@@ -174,7 +183,6 @@ class GeminiCarLookupService:
                 "temperature": 0.25,
                 "topK": 32,
                 "topP": 0.9,
-                "responseMimeType": "application/json",
             },
         }
         if self.system_instruction:

@@ -43,7 +43,7 @@ def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[Dict[str, float]]
 st.set_page_config(page_title="型式 Lookup", page_icon="🚗", layout="wide")
 
 st.title("Gemini による型式 Lookup デモ")
-st.caption("Gemini 2.0 Flash (experimental) + Google 検索グラウンディングで型式から車両情報を引き当てます")
+st.caption("Gemini 2.5 Flash + Google 検索グラウンディングで型式から車両情報を引き当てます")
 
 with st.sidebar:
     st.header("設定")
