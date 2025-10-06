@@ -20,7 +20,7 @@ __all__ = [
 GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/{model}:generateContent"
 PROMPT_TEMPLATE = (
     "You are an automotive research assistant. Given a Japanese vehicle model code (kata-shiki), "
-    "use grounded web search to locate authoritative sources. "
+    "use grounded web search to locate authoritative sources. {language_instruction} "
     "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
     "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
     "('high'|'medium'|'low'), optional grade_or_variant, years, notes, and sources (array of URLs). "
@@ -116,6 +116,7 @@ class GeminiCarLookupService:
         include_raw_response: bool = False,
         tools: Optional[Sequence[Dict[str, Any]]] = None,
         system_instruction: Optional[str] = None,
+        response_language: str = "日本語",
     ) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
@@ -130,6 +131,7 @@ class GeminiCarLookupService:
             "Ground every answer in reputable automotive sources (OEM documentation, trusted press, "
             "dealership listings). Refuse to answer if sources conflict or cannot be verified."
         )
+        self.response_language = response_language
 
     def lookup(self, model_code: str) -> LookupResult:
         if not model_code or not model_code.strip():
@@ -147,7 +149,15 @@ class GeminiCarLookupService:
         )
 
     def _build_payload(self, model_code: str) -> Dict[str, Any]:
-        user_prompt = PROMPT_TEMPLATE.format(model_code=model_code)
+        language_instruction = (
+            f"Produce all explanatory or descriptive text fields (such as notes, years, and confidence explanations) in {self.response_language}."
+            if self.response_language
+            else ""
+        )
+        user_prompt = PROMPT_TEMPLATE.format(
+            model_code=model_code,
+            language_instruction=language_instruction,
+        )
         payload: Dict[str, Any] = {
             "contents": [
                 {

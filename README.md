@@ -43,6 +43,9 @@ for match in result.matches:
     print(match.to_dict())
 
 print(result.usage_metadata)
+
+# 英語で結果を受け取りたい場合
+result_en = lookup_car("DBA-ZRR70W", response_language="English")
 ```
 
 `usage_metadata` にはトークン消費量などが含まれるため、課金額の目安計算に利用できます。

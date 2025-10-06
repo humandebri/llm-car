@@ -55,6 +55,12 @@ with st.sidebar:
         value=False,
         help="Gemini のレスポンス解析に失敗した際のデバッグ用",
     )
+    response_language = st.selectbox(
+        "レスポンス言語",
+        options=["日本語", "English", "한국어", "繁體中文"],
+        index=0,
+        help="自由入力に切り替えたい場合は後でコードを編集してください",
+    )
     st.markdown("---")
     st.caption(
         "料金はサンプル値で概算します。最新の料金表を必ず確認してください。"
@@ -72,6 +78,7 @@ if lookup_button:
                 service = GeminiCarLookupService(
                     api_key=api_key_input or None,
                     include_raw_response=include_raw,
+                    response_language=response_language,
                 )
                 result = service.lookup(model_code.strip())
             except ValueError as exc:
