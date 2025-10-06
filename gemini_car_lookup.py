@@ -21,11 +21,11 @@ GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/{mod
 PROMPT_TEMPLATE = (
     "You are an automotive research assistant. Given a Japanese vehicle model code (kata-shiki), "
     "use grounded web search to locate authoritative sources. {language_instruction} "
-    "Provide a separate object for each distinct vehicle or market name; do not merge multiple names into a single entry. "
+    "Provide a separate object for each distinct vehicle or market name and grade/variant; do not merge multiple names or grades into a single entry. "
     "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
     "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
-    "('high'|'medium'|'low'), optional grade_or_variant"
-    "If the lookup fails, return an empty `vehicles` array. "
+    "('high'|'medium'|'low'), optional grade"
+    "If the lookup fails, return an empty `vehicles` array and explain why in `notes` for a placeholder entry. "
     "Never invent data that is not grounded in the cited sources. Model code: {model_code}."
 )
 
@@ -78,7 +78,7 @@ class VehicleMatch:
     manufacturer: Optional[str]
     vehicle_name: Optional[str]
     displacement_cc: Optional[int]
-    grade_or_variant: Optional[str] = None
+    grade: Optional[str] = None
     confidence: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -158,7 +158,7 @@ class GeminiCarLookupService:
     def _build_payload(self, model_code: str) -> Dict[str, Any]:
         language_instruction = (
             "Return all textual field values"
-            " (manufacturer, vehicle_name, grade_or_variant, confidence) "
+            " (manufacturer, vehicle_name, grade, confidence) "
             f"in {self.response_language}. "
             f"If source titles are quoted, localise descriptive text while keeping URL domains intact. "
             if self.response_language
@@ -341,7 +341,7 @@ class GeminiCarLookupService:
             manufacturer=item.get("manufacturer"),
             vehicle_name=item.get("vehicle_name") or item.get("car_name") or item.get("model"),
             displacement_cc=displacement,
-            grade_or_variant=item.get("grade_or_variant"),
+            grade=item.get("grade"),
             confidence=confidence,
         )
 
