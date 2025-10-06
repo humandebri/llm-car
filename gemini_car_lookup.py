@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, replace
 from typing import Any, Dict, Iterable, List, Optional, Sequence
 
 import requests
@@ -21,6 +21,7 @@ GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/{mod
 PROMPT_TEMPLATE = (
     "You are an automotive research assistant. Given a Japanese vehicle model code (kata-shiki), "
     "use grounded web search to locate authoritative sources. {language_instruction} "
+    "Provide a separate object for each distinct vehicle or market name; do not merge multiple names into a single entry. "
     "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
     "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
     "('high'|'medium'|'low'), optional grade_or_variant, years, notes, and sources (array of URLs). "
@@ -150,7 +151,10 @@ class GeminiCarLookupService:
 
     def _build_payload(self, model_code: str) -> Dict[str, Any]:
         language_instruction = (
-            f"Produce all explanatory or descriptive text fields (such as notes, years, and confidence explanations) in {self.response_language}."
+            "Return all textual field values"
+            " (manufacturer, vehicle_name, grade_or_variant, years, notes, confidence) "
+            f"in {self.response_language}. "
+            f"If source titles are quoted, localise descriptive text while keeping URL domains intact. "
             if self.response_language
             else ""
         )
@@ -216,6 +220,8 @@ class GeminiCarLookupService:
         matches: List[VehicleMatch] = []
         for item in vehicle_payloads:
             matches.append(self._build_match(item, sources))
+
+        matches = self._expand_vehicle_names(matches)
 
         if not matches:
             matches.append(
@@ -337,6 +343,36 @@ class GeminiCarLookupService:
             notes=item.get("notes"),
             sources=sources,
         )
+
+    @staticmethod
+    def _split_vehicle_name(name: str) -> List[str]:
+        if not name:
+            return []
+        for delimiter in ("/", "／"):
+            if delimiter in name:
+                parts = [part.strip() for part in name.split(delimiter) if part.strip()]
+                if len(parts) > 1:
+                    return parts
+        return [name]
+
+    @staticmethod
+    def _expand_vehicle_names(matches: List[VehicleMatch]) -> List[VehicleMatch]:
+        expanded: List[VehicleMatch] = []
+        for match in matches:
+            name = (match.vehicle_name or "").strip()
+            if not name:
+                expanded.append(match)
+                continue
+
+            split_names = GeminiCarLookupService._split_vehicle_name(name)
+            if len(split_names) <= 1:
+                expanded.append(match)
+                continue
+
+            for split_name in split_names:
+                expanded.append(replace(match, vehicle_name=split_name))
+
+        return expanded
 
 
 def lookup_car(model_code: str, **kwargs: Any) -> LookupResult:
