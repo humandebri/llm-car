@@ -25,7 +25,6 @@ PROMPT_TEMPLATE = (
     "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
     "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
     "('high'|'medium'|'low'), optional grade"
-    "If the lookup fails, return an empty `vehicles` array and explain why in `notes` for a placeholder entry. "
     "Never invent data that is not grounded in the cited sources. Model code: {model_code}."
 )
 
@@ -177,9 +176,9 @@ class GeminiCarLookupService:
             ],
             "tools": self.tools,
             "generationConfig": {
-                "temperature": 0.0,
-                "topK": 1,
-                "topP": 1.0,
+                "temperature": 0.25,
+                "topK": 32,
+                "topP": 0.9,
             },
         }
         if self.system_instruction:
