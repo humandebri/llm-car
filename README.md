@@ -35,7 +35,7 @@
 ### Python から呼び出す
 
 ```python
-from gemini_car_lookup import lookup_car
+from gemini_car_lookup import lookup_car, GeminiCarLookupService
 
 result = lookup_car("DBA-ZRR70W")
 
@@ -46,9 +46,15 @@ print(result.usage_metadata)
 
 # 英語で結果を受け取りたい場合
 result_en = lookup_car("DBA-ZRR70W", response_language="English")
+
+# Gemini 2.5 Flash など新しいモデルを使いたい場合
+service = GeminiCarLookupService(model_name="models/gemini-2.5-flash")
+result_new_model = service.lookup("DBA-ZRR70W")
 ```
 
 `usage_metadata` にはトークン消費量などが含まれるため、課金額の目安計算に利用できます。
+
+`GeminiCarLookupService` はモデル名に `gemini-2.5` を含む場合、自動的に JSON スキーマを利用する設定へ切り替わります。旧モデルで JSON MIME を明示したい場合は `response_mime_type="application/json"` を指定してください。
 
 ### サンプルスクリプト
 

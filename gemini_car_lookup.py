@@ -160,6 +160,7 @@ class GeminiCarLookupService:
         response_language: str = "日本語",
         response_mime_type: Optional[str] = "auto",
         response_schema: Optional[Dict[str, Any]] = None,
+        allow_google_search_fallback: bool = False,
     ) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
@@ -180,6 +181,7 @@ class GeminiCarLookupService:
         self._uses_search_retrieval = any(
             isinstance(tool, dict) and "googleSearchRetrieval" in tool for tool in self.tools
         )
+        self.allow_google_search_fallback = allow_google_search_fallback
         self.system_instruction = system_instruction or (
             "回答は必ず信頼性の高い自動車情報源に基づくこと。"
             "広告的・推測的な情報や、出典間で内容が食い違うものは使用しないこと。"
@@ -250,16 +252,22 @@ class GeminiCarLookupService:
             return self._decode_response_json(response)
 
         if self._should_retry_without_grounding(response.status_code, response.text):
-            fallback_payload, fallback_tools = self._strip_search_retrieval_tools(payload)
-            fallback_response = self._perform_request(fallback_payload, params)
-            if fallback_response.status_code == 200:
-                self.tools = fallback_tools
-                self._uses_search_retrieval = any(
-                    isinstance(tool, dict) and "googleSearchRetrieval" in tool for tool in self.tools
+            if self.allow_google_search_fallback:
+                fallback_payload, fallback_tools = self._build_google_search_fallback(payload)
+                fallback_response = self._perform_request(fallback_payload, params)
+                if fallback_response.status_code == 200:
+                    self.tools = fallback_tools
+                    self._uses_search_retrieval = any(
+                        isinstance(tool, dict) and "googleSearchRetrieval" in tool for tool in self.tools
+                    )
+                    return self._decode_response_json(fallback_response)
+                raise GeminiCarLookupError(
+                    f"Gemini API error {fallback_response.status_code}: {fallback_response.text[:200]}"
                 )
-                return self._decode_response_json(fallback_response)
             raise GeminiCarLookupError(
-                f"Gemini API error {fallback_response.status_code}: {fallback_response.text[:200]}"
+                "Search Grounding is not supported for this API key/project. "
+                "Enable Search Grounding or instantiate GeminiCarLookupService with "
+                "allow_google_search_fallback=True to fall back to the legacy googleSearch tool."
             )
 
         raise GeminiCarLookupError(
@@ -289,20 +297,23 @@ class GeminiCarLookupService:
         lowered = (response_body or "").lower()
         return "search grounding is not supported" in lowered or "groundingmode" in lowered
 
-    def _strip_search_retrieval_tools(
+    def _build_google_search_fallback(
         self, payload: Dict[str, Any]
     ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
         sanitized = copy.deepcopy(payload)
         tools = sanitized.get("tools", []) or []
         fallback_tools: List[Dict[str, Any]] = []
+        has_google_search = False
         for tool in tools:
-            if isinstance(tool, dict) and "googleSearchRetrieval" in tool:
-                continue
+            if isinstance(tool, dict):
+                if "googleSearchRetrieval" in tool:
+                    continue
+                if "googleSearch" in tool:
+                    has_google_search = True
             fallback_tools.append(tool)
-        if fallback_tools:
-            sanitized["tools"] = fallback_tools
-        else:
-            sanitized.pop("tools", None)
+        if not has_google_search:
+            fallback_tools.append({"googleSearch": {}})
+        sanitized["tools"] = fallback_tools
         return sanitized, fallback_tools
 
     def _parse_matches(self, response: Dict[str, Any], model_code: str) -> List[VehicleMatch]:

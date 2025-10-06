@@ -1,3 +1,5 @@
+import time
+
 from gemini_car_lookup import lookup_car, GeminiCarLookupError
 
 # Gemini 2.0 Flash の暫定価格: 1M トークンあたり $0.10。
@@ -34,17 +36,25 @@ def estimate_cost(result) -> None:
 def main() -> None:
     # TODO: 型式コードを必要に応じて差し替えてください。
     try:
-        result = lookup_car("DBA-ZRR70W", include_raw_response=False)
+        start_time = time.perf_counter()
+        result = lookup_car("5BA-TALA15", include_raw_response= True )
+        elapsed = time.perf_counter() - start_time
     except GeminiCarLookupError as exc:
         print("Lookup failed:", exc)
         print("Tips: 一時的に include_raw_response=True を指定するとレスポンス全体を確認できます。")
         return
 
+    print(f"Lookup latency: {elapsed:.2f} seconds")
+
     for match in result.matches:
         print(match.to_dict())
+    
+    if result.raw_response:
+        import json
+        print(json.dumps(result.raw_response, ensure_ascii=False, indent=2))
+
 
     estimate_cost(result)
-
 
 if __name__ == "__main__":
     main()
