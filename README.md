@@ -29,6 +29,11 @@
    GEMINI_API_KEY=sk-xxxxxxxxxxxxxxxx
    ```
    `.env` はモジュール読み込み時に自動でロードされ、Git 管理対象外になっています。
+   Streamlit デモでは `.streamlit/secrets.toml` に保存したキーも自動的に利用します。
+   ```toml
+   # .streamlit/secrets.toml
+   GEMINI_API_KEY = "sk-xxxxxxxxxxxxxxxx"
+   ```
 
 ## 使い方
 
@@ -75,6 +80,7 @@ streamlit run streamlit_app.py
 ```
 
 サイドバーで API キーを入力（または `.env` の値を利用）し、型式コードを指定して Lookup を実行できます。レスポンスの Raw JSON を表示するチェックボックスも用意しているので、解析に失敗した際のデバッグにも活用できます。
+`.streamlit/secrets.toml` にキーを保存していれば、入力欄を空にしても自動で利用されます。
 
 ## トラブルシューティング
 

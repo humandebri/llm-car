@@ -18,6 +18,17 @@ OUTPUT_RATE_PER_1K_TOKENS_USD = 0.0001
 USD_TO_JPY_RATE = 150.0
 
 
+def resolve_default_api_key() -> str:
+    """Prefer Streamlit secrets over environment variables for the API key."""
+    if "GEMINI_API_KEY" in st.secrets:
+        secret_value = st.secrets["GEMINI_API_KEY"]
+        if isinstance(secret_value, str):
+            stripped = secret_value.strip()
+            if stripped:
+                return stripped
+    return os.getenv("GEMINI_API_KEY", "").strip()
+
+
 def estimate_cost(usage: Optional[Dict[str, int]]) -> Optional[Dict[str, float]]:
     if not usage:
         return None
@@ -48,13 +59,13 @@ st.caption("Gemini 2.5 Flash + Google 検索グラウンディングで型式か
 
 with st.sidebar:
     st.header("設定")
-    default_api_key = os.getenv("GEMINI_API_KEY", "")
+    default_api_key = resolve_default_api_key()
     api_key_input = st.text_input(
         "Gemini API Key",
-        value=default_api_key,
+        value="",
         placeholder="sk-...",
         type="password",
-        help="環境変数 GEMINI_API_KEY を利用する場合は空欄でも構いません",
+        help="Streamlit の secrets または環境変数 GEMINI_API_KEY が設定済みなら空欄で OK",
     )
     include_raw = st.checkbox(
         "レスポンスの raw JSON も表示",
@@ -82,8 +93,9 @@ if lookup_button:
         with st.spinner("Gemini へ問い合わせ中..."):
             elapsed_seconds: Optional[float] = None
             try:
+                effective_api_key = (api_key_input or default_api_key).strip() or None
                 service = GeminiCarLookupService(
-                    api_key=api_key_input or None,
+                    api_key=effective_api_key,
                     include_raw_response=include_raw,
                     response_language=response_language,
                 )
