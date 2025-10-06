@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import os
 from pathlib import Path
@@ -19,15 +20,54 @@ __all__ = [
 
 GEMINI_API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/{model}:generateContent"
 PROMPT_TEMPLATE = (
-    "You are an automotive research assistant. Given a Japanese vehicle model code (kata-shiki), "
-    "use grounded web search to locate authoritative sources. {language_instruction} "
-    "Provide a separate object for each distinct vehicle or market name; do not merge multiple names into a single entry. "
-    "Respond strictly as JSON with a top-level object containing a `vehicles` array. "
-    "Each entry must include: manufacturer, vehicle_name, displacement_cc (integer), confidence "
-    "('high'|'medium'|'low'), optional grade_or_variant, years, notes, and sources (array of URLs). "
-    "If the lookup fails, return an empty `vehicles` array and explain why in `notes` for a placeholder entry. "
-    "Never invent data that is not grounded in the cited sources. Model code: {model_code}."
+    "あなたは自動車データリサーチアシスタントです。"
+    "車両型式『{model_code}』に対応する車両情報を、Google検索ツールで調査してください"
+    "{language_instruction}"
+    "LLMの事前知識や学習データに基づく推測・補完は一切行わず、"
+    "必ず実在する情報源に裏付けられたデータのみを使用してください。"
+    "裏付けの取れない情報は回答に含めてはいけません。"
+    "複数の車種が確認された場合は、別オブジェクトとして扱ってください。"
+    "回答はJSON形式のみとし、トップレベルに`vehicles`配列を置きます。"
+    "各要素には manufacturer, vehicle_name, displacement_cc（整数）, "
+    "confidence（'high'|'medium'|'low'）, grade_or_variant(グレード配列), sources（URL配列）を含めてください。"
+    "根拠が弱い場合でも候補を返してよいが、confidence を 'medium' または 'low' に設定し、"
+    "全く根拠が得られない場合のみ、`vehicles` を空配列とし、notes にその理由を説明します。"
+    "情報の捏造・推測・補完は禁止です。"
+    "Never guess, infer, or hallucinate likely models."
+    "Perform at most one grounded web search query, and stop after the first valid source is found."
 )
+
+DEFAULT_RESPONSE_SCHEMA: Dict[str, Any] = {
+    "type": "OBJECT",
+    "properties": {
+        "vehicles": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "manufacturer": {"type": "STRING"},
+                    "vehicle_name": {"type": "STRING"},
+                    "displacement_cc": {"type": "NUMBER"},
+                    "grade_or_variant": {"type": "STRING"},
+                    "years": {"type": "STRING"},
+                    "confidence": {"type": "STRING"},
+                    "sources": {
+                        "type": "ARRAY",
+                        "items": {"type": "STRING"},
+                    },
+                },
+                "required": [
+                    "manufacturer",
+                    "vehicle_name",
+                    "displacement_cc",
+                    "confidence",
+                    "sources",
+                ],
+            },
+        }
+    },
+    "required": ["vehicles"],
+}
 
 
 def _load_env_from_file(path: str = ".env") -> None:
@@ -112,12 +152,14 @@ class GeminiCarLookupService:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "models/gemini-2.0-flash-exp",
+        model_name: str = "models/gemini-2.5-flash",
         timeout_seconds: int = 30,
         include_raw_response: bool = False,
         tools: Optional[Sequence[Dict[str, Any]]] = None,
         system_instruction: Optional[str] = None,
         response_language: str = "日本語",
+        response_mime_type: Optional[str] = "auto",
+        response_schema: Optional[Dict[str, Any]] = None,
     ) -> None:
         self.api_key = api_key or os.getenv("GEMINI_API_KEY")
         if not self.api_key:
@@ -127,12 +169,30 @@ class GeminiCarLookupService:
         self.timeout_seconds = timeout_seconds
         self.include_raw_response = include_raw_response
         self.endpoint = GEMINI_API_URL_TEMPLATE.format(model=model_name)
-        self.tools = list(tools) if tools is not None else [{"googleSearch": {}}]
+        if tools is not None:
+            self.tools = list(tools)
+        else:
+            if "2.5" in self.model_name:
+                # Gemini auto-selects grounding strength; no explicit mode field is accepted now.
+                self.tools = [{"googleSearchRetrieval": {}}]
+            else:
+                self.tools = [{"googleSearch": {}}]
+        self._uses_search_retrieval = any(
+            isinstance(tool, dict) and "googleSearchRetrieval" in tool for tool in self.tools
+        )
         self.system_instruction = system_instruction or (
-            "Ground every answer in reputable automotive sources (OEM documentation, trusted press, "
-            "dealership listings). Refuse to answer if sources conflict or cannot be verified."
+            "回答は必ず信頼性の高い自動車情報源に基づくこと。"
+            "広告的・推測的な情報や、出典間で内容が食い違うものは使用しないこと。"
         )
         self.response_language = response_language
+        if response_mime_type == "auto":
+            self.response_mime_type: Optional[str] = None if "2.5" in self.model_name else "application/json"
+        else:
+            self.response_mime_type = response_mime_type
+        if response_schema is None and "2.5" in self.model_name:
+            self.response_schema = DEFAULT_RESPONSE_SCHEMA
+        else:
+            self.response_schema = response_schema
 
     def lookup(self, model_code: str) -> LookupResult:
         if not model_code or not model_code.strip():
@@ -151,10 +211,7 @@ class GeminiCarLookupService:
 
     def _build_payload(self, model_code: str) -> Dict[str, Any]:
         language_instruction = (
-            "Return all textual field values"
-            " (manufacturer, vehicle_name, grade_or_variant, years, notes, confidence) "
-            f"in {self.response_language}. "
-            f"If source titles are quoted, localise descriptive text while keeping URL domains intact. "
+            f"\n全ての文字列フィールド(manufacturer, vehicle_name, grade_or_variant, years, notes, confidence)は{self.response_language}で記述してください。"
             if self.response_language
             else ""
         )
@@ -170,21 +227,48 @@ class GeminiCarLookupService:
                 }
             ],
             "tools": self.tools,
-            "generationConfig": {
-                "temperature": 0.25,
-                "topK": 32,
-                "topP": 0.9,
-                "responseMimeType": "application/json",
-            },
         }
+        generation_config: Dict[str, Any] = {
+            "temperature": 0.0,
+            "topK": 1,
+            "topP": 1.0,
+        }
+        if self.response_schema:
+            generation_config["responseSchema"] = self.response_schema
+        elif self.response_mime_type:
+            generation_config["responseMimeType"] = self.response_mime_type
+        payload["generationConfig"] = generation_config
         if self.system_instruction:
             payload["systemInstruction"] = {"parts": [{"text": self.system_instruction}]}
         return payload
 
     def _call_api(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         params = {"key": self.api_key}
+        response = self._perform_request(payload, params)
+
+        if response.status_code == 200:
+            return self._decode_response_json(response)
+
+        if self._should_retry_without_grounding(response.status_code, response.text):
+            fallback_payload, fallback_tools = self._strip_search_retrieval_tools(payload)
+            fallback_response = self._perform_request(fallback_payload, params)
+            if fallback_response.status_code == 200:
+                self.tools = fallback_tools
+                self._uses_search_retrieval = any(
+                    isinstance(tool, dict) and "googleSearchRetrieval" in tool for tool in self.tools
+                )
+                return self._decode_response_json(fallback_response)
+            raise GeminiCarLookupError(
+                f"Gemini API error {fallback_response.status_code}: {fallback_response.text[:200]}"
+            )
+
+        raise GeminiCarLookupError(
+            f"Gemini API error {response.status_code}: {response.text[:200]}"
+        )
+
+    def _perform_request(self, payload: Dict[str, Any], params: Dict[str, Any]) -> requests.Response:
         try:
-            resp = requests.post(
+            return requests.post(
                 self.endpoint,
                 params=params,
                 json=payload,
@@ -193,15 +277,33 @@ class GeminiCarLookupService:
         except requests.RequestException as exc:
             raise GeminiCarLookupError(f"HTTP request to Gemini failed: {exc}") from exc
 
-        if resp.status_code != 200:
-            raise GeminiCarLookupError(
-                f"Gemini API error {resp.status_code}: {resp.text[:200]}"
-            )
-
+    def _decode_response_json(self, response: requests.Response) -> Dict[str, Any]:
         try:
-            return resp.json()
+            return response.json()
         except json.JSONDecodeError as exc:
             raise GeminiCarLookupError("Failed to decode JSON from Gemini response") from exc
+
+    def _should_retry_without_grounding(self, status_code: int, response_body: str) -> bool:
+        if status_code != 400 or not self._uses_search_retrieval:
+            return False
+        lowered = (response_body or "").lower()
+        return "search grounding is not supported" in lowered or "groundingmode" in lowered
+
+    def _strip_search_retrieval_tools(
+        self, payload: Dict[str, Any]
+    ) -> tuple[Dict[str, Any], List[Dict[str, Any]]]:
+        sanitized = copy.deepcopy(payload)
+        tools = sanitized.get("tools", []) or []
+        fallback_tools: List[Dict[str, Any]] = []
+        for tool in tools:
+            if isinstance(tool, dict) and "googleSearchRetrieval" in tool:
+                continue
+            fallback_tools.append(tool)
+        if fallback_tools:
+            sanitized["tools"] = fallback_tools
+        else:
+            sanitized.pop("tools", None)
+        return sanitized, fallback_tools
 
     def _parse_matches(self, response: Dict[str, Any], model_code: str) -> List[VehicleMatch]:
         candidates = response.get("candidates") or []
@@ -209,11 +311,13 @@ class GeminiCarLookupService:
             raise GeminiCarLookupError("Gemini returned no candidates")
 
         primary = candidates[0]
-        response_text = self._collect_text_parts(primary)
-        if not response_text:
-            raise GeminiCarLookupError("Gemini candidate missing text content")
+        structured = self._extract_structured_candidate(primary)
+        if structured is None:
+            response_text = self._collect_text_parts(primary)
+            if not response_text:
+                raise GeminiCarLookupError("Gemini candidate missing text content")
 
-        structured = self._load_structured_payload(response_text)
+            structured = self._load_structured_payload(response_text)
         vehicle_payloads = self._extract_vehicle_payloads(structured)
         sources = self._extract_grounded_sources(primary)
 
@@ -241,6 +345,46 @@ class GeminiCarLookupService:
         parts = candidate.get("content", {}).get("parts", [])
         text_parts = [part.get("text", "") for part in parts if part.get("text")]
         return "\n".join(filter(None, text_parts)).strip()
+
+    @staticmethod
+    def _extract_structured_candidate(candidate: Dict[str, Any]) -> Optional[Any]:
+        parts = candidate.get("content", {}).get("parts", [])
+        for part in parts:
+            if "structValue" in part:
+                return GeminiCarLookupService._convert_struct_value(part["structValue"])
+            if "jsonValue" in part:
+                return part["jsonValue"]
+        return None
+
+    @staticmethod
+    def _convert_struct_value(struct_value: Dict[str, Any]) -> Dict[str, Any]:
+        fields = struct_value.get("fields")
+        if not isinstance(fields, dict):
+            return struct_value  # unexpected shape; return raw
+        return {
+            key: GeminiCarLookupService._convert_proto_value(value)
+            for key, value in fields.items()
+        }
+
+    @staticmethod
+    def _convert_proto_value(value: Any) -> Any:
+        if isinstance(value, dict):
+            if "stringValue" in value:
+                return value["stringValue"]
+            if "numberValue" in value:
+                return value["numberValue"]
+            if "boolValue" in value:
+                return value["boolValue"]
+            if "nullValue" in value:
+                return None
+            if "structValue" in value:
+                return GeminiCarLookupService._convert_struct_value(value["structValue"])
+            if "listValue" in value:
+                list_payload = value["listValue"].get("values", [])
+                return [GeminiCarLookupService._convert_proto_value(item) for item in list_payload]
+            if "jsonValue" in value:
+                return value["jsonValue"]
+        return value
 
     @staticmethod
     def _load_structured_payload(text: str) -> Any:
