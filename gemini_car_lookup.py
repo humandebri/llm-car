@@ -152,7 +152,7 @@ class GeminiCarLookupService:
     def __init__(
         self,
         api_key: Optional[str] = None,
-        model_name: str = "models/gemini-2.5-flash",
+        model_name: str = "models/gemini-2.0-flash",
         timeout_seconds: int = 30,
         include_raw_response: bool = False,
         tools: Optional[Sequence[Dict[str, Any]]] = None,
